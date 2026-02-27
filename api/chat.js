@@ -1,5 +1,4 @@
 module.exports = async function handler(req, res) {
-    // Enable CORS (optional)
     res.setHeader('Access-Control-Allow-Origin', '*');
 
     if (req.method !== 'POST') {
@@ -17,58 +16,48 @@ module.exports = async function handler(req, res) {
         return res.status(500).json({ error: 'Server configuration error: missing HF_TOKEN' });
     }
 
-    const systemPrompt = `You are TeleHealthHelper, a patient, friendly AI assistant helping older adults understand telehealth.
+    // For testing, use a simple model that definitely exists
+    const model = "gpt2";  // Change this later to a better model once it works
+    const url = `https://router.huggingface.co/hf-inference/models/${model}`;
+    console.log(`Fetching URL: ${url}`);
 
-Core rules:
-- Use simple, clear language. Avoid medical jargon.
-- Be encouraging and patient.
-- Use analogies comparing telehealth to familiar things (phone calls, TV).
-- Break information into small steps.
-- Address common concerns: technology fear, privacy, cost, hearing/vision issues.
-- If the user seems confused, offer to explain differently.
-- Keep responses concise but warm.`;
+    const systemPrompt = `You are TeleHealthHelper, a patient, friendly AI assistant helping older adults understand telehealth.`;
 
     const prompt = `${systemPrompt}\n\nUser: ${message}\nAssistant:`;
 
     try {
-        console.log('Sending request to Hugging Face with prompt:', prompt);
-
-        const response = await fetch(
-            "https://router.huggingface.co/hf-inference/models/mistralai/Mistral-7B-Instruct-v0.2",
-            {
-                headers: {
-                    Authorization: `Bearer ${HF_TOKEN}`,
-                    "Content-Type": "application/json",
+        const response = await fetch(url, {
+            headers: {
+                Authorization: `Bearer ${HF_TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            method: "POST",
+            body: JSON.stringify({
+                inputs: prompt,
+                parameters: {
+                    max_new_tokens: 100,  // small for testing
+                    temperature: 0.7,
+                    return_full_text: false,
                 },
-                method: "POST",
-                body: JSON.stringify({
-                    inputs: prompt,
-                    parameters: {
-                        max_new_tokens: 500,
-                        temperature: 0.7,
-                        return_full_text: false,
-                    },
-                }),
-            }
-        );
+            }),
+        });
 
-        console.log('Hugging Face response status:', response.status);
+        console.log('Response status:', response.status);
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Hugging Face error:', errorText);
+            console.error('Error response body:', errorText);
             return res.status(500).json({ error: `Hugging Face API error: ${errorText}` });
         }
 
         const result = await response.json();
         console.log('Hugging Face result:', result);
 
-        // The API returns an array with generated text
-        const reply = result[0]?.generated_text || "I'm sorry, I couldn't generate a response.";
-
+        // gpt2 returns an array with generated text
+        const reply = result[0]?.generated_text || "No response generated.";
         res.status(200).json({ reply });
     } catch (error) {
-        console.error('Caught exception:', error.message, error.stack);
+        console.error('Exception:', error.message, error.stack);
         res.status(500).json({ error: `Failed to fetch from Hugging Face: ${error.message}` });
     }
 };
