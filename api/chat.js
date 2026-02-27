@@ -1,4 +1,7 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
+    // Enable CORS (optional)
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -8,8 +11,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Message is required' });
     }
 
-    // Your Hugging Face API key – set as environment variable in Vercel
     const HF_TOKEN = process.env.HF_TOKEN;
+    if (!HF_TOKEN) {
+        console.error('HF_TOKEN is not set');
+        return res.status(500).json({ error: 'Server configuration error: missing HF_TOKEN' });
+    }
 
     const systemPrompt = `You are TeleHealthHelper, a patient, friendly AI assistant helping older adults understand telehealth.
 
@@ -25,8 +31,10 @@ Core rules:
     const prompt = `${systemPrompt}\n\nUser: ${message}\nAssistant:`;
 
     try {
+        console.log('Sending request to Hugging Face with prompt:', prompt);
+
         const response = await fetch(
-            "https://router.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",,
+            "https://router.huggingface.co/hf-inference/models/mistralai/Mistral-7B-Instruct-v0.2",
             {
                 headers: {
                     Authorization: `Bearer ${HF_TOKEN}`,
@@ -44,18 +52,23 @@ Core rules:
             }
         );
 
+        console.log('Hugging Face response status:', response.status);
+
         if (!response.ok) {
-            const error = await response.text();
-            return res.status(500).json({ error: `Hugging Face API error: ${error}` });
+            const errorText = await response.text();
+            console.error('Hugging Face error:', errorText);
+            return res.status(500).json({ error: `Hugging Face API error: ${errorText}` });
         }
 
         const result = await response.json();
+        console.log('Hugging Face result:', result);
+
         // The API returns an array with generated text
         const reply = result[0]?.generated_text || "I'm sorry, I couldn't generate a response.";
 
         res.status(200).json({ reply });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Failed to fetch from Hugging Face' });
+        console.error('Caught exception:', error.message, error.stack);
+        res.status(500).json({ error: `Failed to fetch from Hugging Face: ${error.message}` });
     }
-}
+};
